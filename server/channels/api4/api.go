@@ -394,6 +394,7 @@ func Init(srv *app.Server) (*API, error) {
 	api.InitContentFlagging()
 	api.InitAgents()
 	api.InitProperties()
+	api.InitOIDC()
 
 	// If we allow testing then listen for manual testing URL hits
 	if *srv.Config().ServiceSettings.EnableTesting {
