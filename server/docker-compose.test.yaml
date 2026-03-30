@@ -1,0 +1,65 @@
+# Optimized for local testing on Apple Silicon (M1/M2/M3)
+# It only forces the platform for the Mattermost application itself.
+services:
+  # Mattermost (x86 for K8s consistency)
+  mattermost:
+    image: mattermost-server:11.6.0_oidc
+    platform: linux/amd64
+    container_name: mattermost-server-test
+    environment:
+      - "MM_SQLSETTINGS_DRIVERNAME=${MM_SQLSETTINGS_DRIVERNAME:-postgres}"
+      - "MM_SQLSETTINGS_DATASOURCE=${MM_SQLSETTINGS_DATASOURCE:-postgres://mmuser:mostest@postgres/mattermost_test?sslmode=disable&connect_timeout=10}"
+      - "MM_SERVICESETTINGS_SITEURL=${MM_SERVICESETTINGS_SITEURL:-http://localhost:8065}"
+    env_file:
+      - .env
+    networks:
+      - mm-test
+    depends_on:
+      - start_dependencies
+    ports:
+      - "8065:8065"
+    volumes:
+      - ./volumes/app/mattermost/data:/mattermost/data
+      - ./volumes/app/mattermost/logs:/mattermost/logs
+      - ./volumes/app/mattermost/config:/mattermost/config
+      - ./volumes/app/mattermost/plugins:/mattermost/plugins
+      - ./volumes/app/mattermost/client/plugins:/mattermost/client/plugins
+    restart: on-failure
+
+  # Dependencies (Auto-select platform)
+  postgres:
+    extends:
+        file: build/docker-compose.common.yml
+        service: postgres
+  minio:
+    extends:
+        file: build/docker-compose.common.yml
+        service: minio
+  inbucket:
+    extends:
+        file: build/docker-compose.common.yml
+        service: inbucket
+  openldap:
+    extends:
+        file: build/docker-compose.common.yml
+        service: openldap
+  redis:
+    extends:
+        file: build/docker-compose.common.yml
+        service: redis
+
+  start_dependencies:
+    image: mattermost/mattermost-wait-for-dep:latest
+    networks:
+      - mm-test
+    depends_on:
+      - postgres
+      - minio
+      - inbucket
+      - openldap
+      - redis
+    command: postgres:5432 minio:9000 inbucket:9001 openldap:389 redis:6379
+
+networks:
+  mm-test:
+    driver: bridge

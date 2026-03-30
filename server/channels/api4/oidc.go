@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,6 +24,7 @@ import (
 // oidcStateEntry tracks state for the OAuth2 authorization code flow.
 type oidcStateEntry struct {
 	DesktopToken string
+	RedirectTo   string
 	CreatedAt    time.Time
 }
 
@@ -85,15 +85,52 @@ func generateState() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func getOIDCConfig() (*oauth2.Config, *oidc.Provider, error) {
+func safeStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func getOIDCConfig(c *Context) (*oauth2.Config, *oidc.Provider, error) {
 	issuer := os.Getenv("OIDC_ISSUER")
 	clientID := os.Getenv("OIDC_CLIENT_ID")
 	clientSecret := os.Getenv("OIDC_CLIENT_SECRET")
 	redirectURL := os.Getenv("OIDC_REDIRECT_URL")
 
+	cfg := c.App.Config()
+
 	if issuer == "" || clientID == "" || clientSecret == "" || redirectURL == "" {
+		// Fallback to config settings
+		if cfg.OpenIdSettings.DiscoveryEndpoint != nil && *cfg.OpenIdSettings.DiscoveryEndpoint != "" {
+			issuer = strings.TrimSuffix(*cfg.OpenIdSettings.DiscoveryEndpoint, "/.well-known/openid-configuration")
+		}
+		if clientID == "" && cfg.OpenIdSettings.Id != nil && *cfg.OpenIdSettings.Id != "" {
+			clientID = *cfg.OpenIdSettings.Id
+		}
+		if clientSecret == "" && cfg.OpenIdSettings.Secret != nil && *cfg.OpenIdSettings.Secret != "" {
+			clientSecret = *cfg.OpenIdSettings.Secret
+		}
+		if redirectURL == "" {
+			if cfg.ServiceSettings.SiteURL != nil && *cfg.ServiceSettings.SiteURL != "" {
+				redirectURL = *cfg.ServiceSettings.SiteURL + "/signup/openid/complete"
+			} else {
+				redirectURL = "/signup/openid/complete"
+			}
+		}
+	}
+
+	if issuer == "" || clientID == "" || clientSecret == "" || redirectURL == "" || !strings.HasPrefix(redirectURL, "http") {
+		mlog.Debug("OIDC configuration missing parameters",
+			mlog.String("issuer", issuer),
+			mlog.String("clientID", clientID),
+			mlog.Bool("clientSecretSet", clientSecret != ""),
+			mlog.String("redirectURL", redirectURL),
+			mlog.String("cfg_DiscoveryEndpoint", safeStr(cfg.OpenIdSettings.DiscoveryEndpoint)),
+			mlog.String("cfg_SiteURL", safeStr(cfg.ServiceSettings.SiteURL)),
+		)
 		return nil, nil, fmt.Errorf(
-			"OIDC not configured: set OIDC_ISSUER, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_REDIRECT_URL",
+			"OIDC not configured: set OIDC_ISSUER or Discovery Endpoint, OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and SiteURL",
 		)
 	}
 
@@ -123,6 +160,27 @@ func (api *API) InitOIDC() {
 		"/api/v4/auth/oidc/complete",
 		api.APIHandler(oidcLoginComplete),
 	).Methods("GET")
+
+	// Official paths hijack
+	api.BaseRoutes.Root.Handle(
+		"/oauth/openid/login",
+		api.APIHandler(oidcLoginStart),
+	).Methods("GET")
+
+	api.BaseRoutes.Root.Handle(
+		"/oauth/openid/complete",
+		api.APIHandler(oidcLoginComplete),
+	).Methods("GET")
+
+	api.BaseRoutes.Root.Handle(
+		"/signup/openid/complete",
+		api.APIHandler(oidcLoginComplete),
+	).Methods("GET")
+
+	api.BaseRoutes.Root.Handle(
+		"/login/openid/complete",
+		api.APIHandler(oidcLoginComplete),
+	).Methods("GET")
 }
 
 func (api *API) InitOIDCLocal() {
@@ -130,7 +188,7 @@ func (api *API) InitOIDCLocal() {
 }
 
 func oidcLoginStart(c *Context, w http.ResponseWriter, r *http.Request) {
-	config, _, err := getOIDCConfig()
+	config, _, err := getOIDCConfig(c)
 	if err != nil {
 		c.Err = model.NewAppError(
 			"oidcLoginStart", "api.oidc.not_configured.app_error",
@@ -149,16 +207,20 @@ func oidcLoginStart(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopToken := r.URL.Query().Get("desktop_token")
+	redirectTo := r.URL.Query().Get("redirect_to")
 	stateStore.Set(state, oidcStateEntry{
 		DesktopToken: desktopToken,
+		RedirectTo:   redirectTo,
 		CreatedAt:    time.Now(),
 	})
 
-	http.Redirect(w, r, config.AuthCodeURL(state), http.StatusFound)
+	authURL := config.AuthCodeURL(state)
+	mlog.Debug("Redirecting to OIDC provider", mlog.String("url", authURL))
+	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
 func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
-	config, provider, err := getOIDCConfig()
+	config, provider, err := getOIDCConfig(c)
 	if err != nil {
 		c.Err = model.NewAppError(
 			"oidcLoginComplete", "api.oidc.not_configured.app_error",
@@ -318,18 +380,14 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Set session cookie and redirect.
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Set-Cookie", fmt.Sprintf(
-		"%s=%s; Path=/; HttpOnly; Secure; SameSite=Lax",
-		model.SessionCookieToken, session.Token,
-	))
+	// Set session and attach cookies.
+	c.AppContext = c.AppContext.WithSession(session)
+	c.App.AttachSessionCookies(c.AppContext, w, r)
 
-	response := map[string]string{
-		"redirect": "/",
+	targetURL := "/"
+	if stateEntry.RedirectTo != "" {
+		targetURL = stateEntry.RedirectTo
 	}
 
-	http.Redirect(w, r, "/", http.StatusFound)
-
-	_ = json.NewEncoder(w).Encode(response)
+	http.Redirect(w, r, targetURL, http.StatusFound)
 }

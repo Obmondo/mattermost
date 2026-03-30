@@ -35,6 +35,7 @@ export const it = {
         }
         return false;
     },
+    always: (value: any) => () => value,
     stateMatches: (key: string, regex: RegExp) => (config: Partial<AdminConfig>, state: any) => state[key].match(regex),
     stateEquals: (key: string, value: any) => (config: Partial<AdminConfig>, state: any) => state[key] === value,
     stateEqualsOrDefault: (key: string, value: any, defaultValue: any) => (config: Partial<AdminConfig>, state: any) => {

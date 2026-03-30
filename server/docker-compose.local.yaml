@@ -1,0 +1,35 @@
+services:
+  mattermost:
+    image: mattermost-server:11.6.0_oidc
+    container_name: mattermost-server-local
+    environment:
+      - "MM_SQLSETTINGS_DRIVERNAME=postgres"
+      - "MM_SQLSETTINGS_DATASOURCE=postgres://mmuser:mostest@postgres/mattermost_test?sslmode=disable&connect_timeout=10"
+      - "MM_SERVICESETTINGS_SITEURL=http://localhost:8065"
+    networks:
+      - mm-test
+    depends_on:
+      - start_dependencies
+    ports:
+      - "8065:8065"
+    volumes:
+      - ./volumes/app/mattermost/data:/mattermost/data
+      - ./volumes/app/mattermost/logs:/mattermost/logs
+      - ./volumes/app/mattermost/config:/mattermost/config
+      - ./volumes/app/mattermost/plugins:/mattermost/plugins
+      - ./volumes/app/mattermost/client/plugins:/mattermost/client/plugins
+    restart: on-failure
+
+  # Overriding the default leader/follower services to not start them
+  leader:
+    entrypoint: ["echo", "skipped"]
+    restart: "no"
+  follower:
+    entrypoint: ["echo", "skipped"]
+    restart: "no"
+  follower2:
+    entrypoint: ["echo", "skipped"]
+    restart: "no"
+  haproxy:
+    entrypoint: ["echo", "skipped"]
+    restart: "no"

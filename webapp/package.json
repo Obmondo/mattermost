@@ -1,5 +1,6 @@
 {
   "name": "@mattermost/webapp",
+  "version": "11.6.0_oidc",
   "private": true,
   "engines": {
     "node": "^24",
