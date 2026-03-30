@@ -114,12 +114,12 @@ func getOIDCConfig() (*oauth2.Config, *oidc.Provider, error) {
 }
 
 func (api *API) InitOIDC() {
-	api.BaseRoutes.Root.HandleFunc(
+	api.BaseRoutes.Root.Handle(
 		"/api/v4/auth/oidc/start",
 		api.APIHandler(oidcLoginStart),
 	).Methods("GET")
 
-	api.BaseRoutes.Root.HandleFunc(
+	api.BaseRoutes.Root.Handle(
 		"/api/v4/auth/oidc/complete",
 		api.APIHandler(oidcLoginComplete),
 	).Methods("GET")
@@ -221,7 +221,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 	// Extract claims.
 	var claims struct {
 		Email             string `json:"email"`
-		PreferredUsername  string `json:"preferred_username"`
+		PreferredUsername string `json:"preferred_username"`
 		Name              string `json:"name"`
 		GivenName         string `json:"given_name"`
 		FamilyName        string `json:"family_name"`
@@ -263,11 +263,11 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 		}
 
 		newUser := &model.User{
-			Email:     claims.Email,
-			Username:  username,
-			FirstName: firstName,
-			LastName:  lastName,
-			Position:  claims.Position,
+			Email:       claims.Email,
+			Username:    username,
+			FirstName:   firstName,
+			LastName:    lastName,
+			Position:    claims.Position,
 			AuthService: "oidc",
 			AuthData:    model.NewPointer(claims.Email),
 		}
@@ -287,10 +287,10 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	// Create session.
 	session := &model.Session{
-		UserId:    user.Id,
-		DeviceId:  "",
-		Roles:     user.GetRawRoles(),
-		IsOAuth:   true,
+		UserId:        user.Id,
+		DeviceId:      "",
+		Roles:         user.GetRawRoles(),
+		IsOAuth:       true,
 		ExpiredNotify: true,
 	}
 
@@ -303,9 +303,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 	// Handle desktop app token.
 	if stateEntry.DesktopToken != "" {
 		desktopToken, appErr := c.App.GenerateAndSaveDesktopToken(
-			time.Now().Add(
-				time.Duration(model.SessionUserAccessTokenExpiryHours)*time.Hour,
-			),
+			time.Now().Add(time.Duration(model.SessionUserAccessTokenExpiryHours)*time.Hour).UnixMilli(),
 			user,
 		)
 		if appErr != nil {
@@ -314,7 +312,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.Redirect(w, r,
-			fmt.Sprintf("/login/desktop?desktop_token=%s", desktopToken.Token),
+			fmt.Sprintf("/login/desktop?desktop_token=%s", *desktopToken),
 			http.StatusFound,
 		)
 		return
