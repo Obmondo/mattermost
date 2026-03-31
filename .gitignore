@@ -75,6 +75,7 @@ tools/sharedchannel-test/sharedchannel-test
 _obj
 _test
 testfiles
+server/volumes
 
 # Architecture specific extensions/prefixes
 [568vq].out

@@ -149,8 +149,8 @@ var versions = []string{
 }
 
 var CurrentVersion = versions[0]
-var BuildNumber string
-var BuildDate string
+var BuildNumber = "dev"
+var BuildDate = "n/a"
 var BuildHash string
 var BuildHashEnterprise string
 var BuildEnterpriseReady string
