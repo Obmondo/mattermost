@@ -151,9 +151,9 @@ var versions = []string{
 var CurrentVersion = versions[0]
 var BuildNumber = "dev"
 var BuildDate = "n/a"
-var BuildHash string
-var BuildHashEnterprise string
-var BuildEnterpriseReady string
+var BuildHash = "dev"
+var BuildHashEnterprise = "none"
+var BuildEnterpriseReady = "false"
 var versionsWithoutHotFixes []string
 
 func init() {

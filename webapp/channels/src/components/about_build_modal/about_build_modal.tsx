@@ -210,7 +210,7 @@ export default function AboutBuildModal(props: Props) {
     );
 
     const getServerVersionString = () => {
-        const version = config.BuildNumber === 'dev' ? config.BuildNumber : config.Version;
+        const version = config.Version;
         const fipsSuffix = config.IsFipsEnabled === 'true' ? ' (FIPS)' : '';
         return intl.formatMessage(
             {id: 'about.serverVersion', defaultMessage: 'Server Version:'},
@@ -238,7 +238,7 @@ export default function AboutBuildModal(props: Props) {
     const getBuildNumberString = () => {
         return intl.formatMessage(
             {id: 'about.buildnumber', defaultMessage: 'Build Number:'},
-        ) + '\u00a0' + (config.BuildNumber === 'dev' ? 'n/a' : config.BuildNumber);
+        ) + '\u00a0' + config.BuildNumber;
     };
 
     const getDatabaseString = () => {
