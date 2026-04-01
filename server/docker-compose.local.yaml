@@ -1,6 +1,6 @@
 services:
   mattermost:
-    image: mattermost-server:11.6.0_oidc
+    image: mattermost-server:11.6.0-oidc
     container_name: mattermost-server-local
     environment:
       - "MM_SQLSETTINGS_DRIVERNAME=postgres"

@@ -3,7 +3,7 @@
 services:
   # Mattermost (x86 for K8s consistency)
   mattermost:
-    image: mattermost-server:11.6.0_oidc
+    image: mattermost-server:11.6.0-oidc
     platform: linux/amd64
     container_name: mattermost-server-test
     environment:

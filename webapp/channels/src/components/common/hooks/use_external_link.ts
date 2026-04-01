@@ -59,7 +59,7 @@ export function useExternalLink(href: string, location: string = '', overwriteQu
         const edition = isEnterpriseReady ? 'enterprise' : 'team';
 
         // Determine server version
-        const serverVersion = config?.BuildNumber === 'dev' ? config.BuildNumber : (config?.Version || '');
+        const serverVersion = config?.Version || '';
 
         // Determine utm_medium based on cloud preview, cloud, or regular
         let utmMedium = 'in-product';

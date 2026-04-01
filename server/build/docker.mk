@@ -1,6 +1,6 @@
 # Makefile for Docker operations
 
-LOCAL_IMAGE_TAG ?= 11.6.0_oidc
+LOCAL_IMAGE_TAG ?= 11.6.0-oidc
 LOCAL_IMAGE_NAME ?= mattermost-server:$(LOCAL_IMAGE_TAG)
 
 .PHONY: docker-build-local
