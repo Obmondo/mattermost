@@ -7,9 +7,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -20,11 +20,14 @@ import (
 
 	"github.com/mattermost/mattermost/server/public/model"
 	"github.com/mattermost/mattermost/server/public/shared/mlog"
+	"github.com/mattermost/mattermost/server/v8/channels/utils"
 )
 
 // oidcStateEntry tracks state for the OAuth2 authorization code flow.
 type oidcStateEntry struct {
 	DesktopToken string
+	RedirectTo   string
+	Action       string
 	CreatedAt    time.Time
 }
 
@@ -149,8 +152,25 @@ func oidcLoginStart(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopToken := r.URL.Query().Get("desktop_token")
+	redirectTo := r.URL.Query().Get("redirect_to")
+	action := r.URL.Query().Get("action")
+
+	// If redirectTo is not in direct query, try parsing from raw query if it's there
+	if redirectTo == "" || action == "" {
+		if q, err := url.ParseQuery(r.URL.RawQuery); err == nil {
+			if redirectTo == "" {
+				redirectTo = q.Get("redirect_to")
+			}
+			if action == "" {
+				action = q.Get("action")
+			}
+		}
+	}
+
 	stateStore.Set(state, oidcStateEntry{
 		DesktopToken: desktopToken,
+		RedirectTo:   redirectTo,
+		Action:       action,
 		CreatedAt:    time.Now(),
 	})
 
@@ -188,7 +208,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Exchange authorization code for tokens.
-	token, err := config.Exchange(r.Context(), code)
+	token, err := config.Exchange(context.Background(), code)
 	if err != nil {
 		c.Err = model.NewAppError(
 			"oidcLoginComplete", "api.oidc.token_exchange.app_error",
@@ -209,7 +229,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idToken, err := verifier.Verify(r.Context(), rawIDToken)
+	idToken, err := verifier.Verify(context.Background(), rawIDToken)
 	if err != nil {
 		c.Err = model.NewAppError(
 			"oidcLoginComplete", "api.oidc.token_verify.app_error",
@@ -268,7 +288,7 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 			FirstName:   firstName,
 			LastName:    lastName,
 			Position:    claims.Position,
-			AuthService: "oidc",
+			AuthService: model.ServiceOpenid,
 			AuthData:    model.NewPointer(claims.Email),
 		}
 
@@ -283,18 +303,27 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 			mlog.String("email", claims.Email),
 			mlog.String("username", username),
 		)
+	} else {
+		// User exists — ensure they use 'openid' auth service.
+		if user.AuthService != model.ServiceOpenid {
+			if _, updateErr := c.App.Srv().Store().User().UpdateAuthData(user.Id, model.ServiceOpenid, model.NewPointer(claims.Email), user.Email, false); updateErr != nil {
+				c.Err = model.NewAppError("oidcLoginComplete", "api.oidc.user_update.app_error", nil, updateErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Refresh user object after update
+			user, appErr = c.App.GetUser(user.Id)
+			if appErr != nil {
+				c.Err = appErr
+				return
+			}
+		}
 	}
 
 	// Create session.
-	session := &model.Session{
-		UserId:        user.Id,
-		DeviceId:      "",
-		Roles:         user.GetRawRoles(),
-		IsOAuth:       true,
-		ExpiredNotify: true,
-	}
+	isMobile := stateEntry.Action == model.OAuthActionMobile || utils.IsMobileRequest(r)
+	isOAuthUser := user.IsOAuthUser()
 
-	session, appErr = c.App.CreateSession(c.AppContext, session)
+	session, appErr := c.App.DoLogin(c.AppContext, w, r, user, "", isMobile, isOAuthUser, false)
 	if appErr != nil {
 		c.Err = appErr
 		return
@@ -302,34 +331,39 @@ func oidcLoginComplete(c *Context, w http.ResponseWriter, r *http.Request) {
 
 	// Handle desktop app token.
 	if stateEntry.DesktopToken != "" {
-		desktopToken, appErr := c.App.GenerateAndSaveDesktopToken(
-			time.Now().Add(time.Duration(model.SessionUserAccessTokenExpiryHours)*time.Hour).UnixMilli(),
+		serverToken, serverTokenErr := c.App.GenerateAndSaveDesktopToken(
+			time.Now().Unix(),
 			user,
 		)
-		if appErr != nil {
-			c.Err = appErr
+		if serverTokenErr != nil {
+			c.Err = serverTokenErr
 			return
 		}
 
-		http.Redirect(w, r,
-			fmt.Sprintf("/login/desktop?desktop_token=%s", *desktopToken),
-			http.StatusFound,
-		)
+		redirectURL := fmt.Sprintf("%s/login/desktop?client_token=%s&server_token=%s",
+			c.GetSiteURLHeader(), stateEntry.DesktopToken, *serverToken)
+
+		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
 
 	// Set session cookie and redirect.
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Set-Cookie", fmt.Sprintf(
-		"%s=%s; Path=/; HttpOnly; Secure; SameSite=Lax",
-		model.SessionCookieToken, session.Token,
-	))
+	c.AppContext = c.AppContext.WithSession(session)
 
-	response := map[string]string{
-		"redirect": "/",
+	if isMobile && stateEntry.RedirectTo != "" {
+		redirectURL := utils.AppendQueryParamsToURL(stateEntry.RedirectTo, map[string]string{
+			model.SessionCookieToken: c.AppContext.Session().Token,
+			model.SessionCookieCsrf:  c.AppContext.Session().GetCSRF(),
+			"srv":                    c.App.GetSiteURL(),
+		})
+
+		// Use the specific translation function from context to ensure proper initialization
+		w.Header().Set("Content-Type", "text/html")
+		utils.RenderMobileAuthComplete(w, redirectURL)
+		return
 	}
 
-	http.Redirect(w, r, "/", http.StatusFound)
+	c.App.AttachSessionCookies(c.AppContext, w, r)
 
-	_ = json.NewEncoder(w).Encode(response)
+	http.Redirect(w, r, "/", http.StatusFound)
 }
