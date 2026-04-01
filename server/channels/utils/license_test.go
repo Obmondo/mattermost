@@ -139,3 +139,47 @@ func TestGetLicenseFileFromDisk(t *testing.T) {
 		assert.Error(t, err, "should have been an invalid file")
 	})
 }
+
+func TestGetClientLicenseOIDC(t *testing.T) {
+	t.Run("should spoof OpenId license when OIDC_ISSUER is set", func(t *testing.T) {
+		os.Setenv("OIDC_ISSUER", "http://localhost:8080/auth/realms/master")
+		defer os.Unsetenv("OIDC_ISSUER")
+
+		// Case 1: No license (Team Edition)
+		props := GetClientLicense(nil)
+		assert.Equal(t, "true", props["OpenId"], "OpenId should be spoofed to true")
+		assert.Equal(t, "false", props["IsLicensed"], "IsLicensed should remain false")
+
+		// Case 2: With license, but OpenId is false in license
+		license := &model.License{
+			Features: &model.Features{},
+			Customer: &model.Customer{},
+		}
+		license.Features.SetDefaults()
+		f := false
+		license.Features.OpenId = &f
+
+		props = GetClientLicense(license)
+		assert.Equal(t, "true", props["OpenId"], "OpenId should be spoofed to true even if license says false")
+	})
+
+	t.Run("should NOT spoof OpenId license when OIDC_ISSUER is NOT set", func(t *testing.T) {
+		os.Unsetenv("OIDC_ISSUER")
+
+		// Case 1: No license
+		props := GetClientLicense(nil)
+		assert.NotEqual(t, "true", props["OpenId"], "OpenId should not be spoofed")
+
+		// Case 2: With license, OpenId is true
+		license := &model.License{
+			Features: &model.Features{},
+			Customer: &model.Customer{},
+		}
+		license.Features.SetDefaults()
+		tr := true
+		license.Features.OpenId = &tr
+
+		props = GetClientLicense(license)
+		assert.Equal(t, "true", props["OpenId"], "OpenId should be true because it's in the license")
+	})
+}
