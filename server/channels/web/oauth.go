@@ -9,6 +9,7 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -462,6 +463,16 @@ func loginWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if c.Params.Service == "openid" && os.Getenv("OIDC_ISSUER") != "" {
+		desktopToken := r.URL.Query().Get("desktop_token")
+		redirectURL := "/api/v4/auth/oidc/start?" + r.URL.RawQuery
+		if desktopToken != "" && !strings.Contains(redirectURL, "desktop_token=") {
+			redirectURL += "&desktop_token=" + desktopToken
+		}
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
 	loginHint := r.URL.Query().Get("login_hint")
 	redirectURL := r.URL.Query().Get("redirect_to")
 	desktopToken := r.URL.Query().Get("desktop_token")
@@ -499,6 +510,16 @@ func mobileLoginWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if c.Params.Service == "openid" && os.Getenv("OIDC_ISSUER") != "" {
+		desktopToken := r.URL.Query().Get("desktop_token")
+		redirectURL := "/api/v4/auth/oidc/start?" + r.URL.RawQuery
+		if desktopToken != "" && !strings.Contains(redirectURL, "desktop_token=") {
+			redirectURL += "&desktop_token=" + desktopToken
+		}
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
 	redirectURL := html.EscapeString(r.URL.Query().Get("redirect_to"))
 
 	if redirectURL != "" && !utils.IsValidMobileAuthRedirectURL(c.App.Config(), redirectURL) {
@@ -530,6 +551,16 @@ func mobileLoginWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 func signupWithOAuth(c *Context, w http.ResponseWriter, r *http.Request) {
 	c.RequireService()
 	if c.Err != nil {
+		return
+	}
+
+	if c.Params.Service == "openid" && os.Getenv("OIDC_ISSUER") != "" {
+		desktopToken := r.URL.Query().Get("desktop_token")
+		redirectURL := "/api/v4/auth/oidc/start?" + r.URL.RawQuery
+		if desktopToken != "" && !strings.Contains(redirectURL, "desktop_token=") {
+			redirectURL += "&desktop_token=" + desktopToken
+		}
+		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
 

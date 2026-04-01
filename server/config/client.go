@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -158,6 +159,12 @@ func GenerateClientConfig(c *model.Config, telemetryID string, license *model.Li
 	props["YoutubeReferrerPolicy"] = strconv.FormatBool(*c.ExperimentalSettings.YoutubeReferrerPolicy)
 	props["UniqueEmojiReactionLimitPerPost"] = strconv.FormatInt(int64(*c.ServiceSettings.UniqueEmojiReactionLimitPerPost), 10)
 
+	if os.Getenv("OIDC_ISSUER") != "" {
+		props["EnableSignUpWithOpenId"] = "true"
+		props["OpenIdButtonText"] = "OIDC"
+		props["OpenIdButtonColor"] = "#5d33a4"
+	}
+
 	props["EnableAttributeBasedAccessControl"] = strconv.FormatBool(*c.AccessControlSettings.EnableAttributeBasedAccessControl)
 	props["EnableChannelScopeAccessControl"] = strconv.FormatBool(*c.AccessControlSettings.EnableChannelScopeAccessControl)
 	props["EnableUserManagedAttributes"] = strconv.FormatBool(*c.AccessControlSettings.EnableUserManagedAttributes)
@@ -256,6 +263,12 @@ func GenerateClientConfig(c *model.Config, telemetryID string, license *model.Li
 			}
 			props["RestrictDMAndGMAutotranslation"] = strconv.FormatBool(*c.AutoTranslationSettings.RestrictDMAndGM)
 		}
+	}
+
+	if os.Getenv("OIDC_ISSUER") != "" {
+		props["EnableSignUpWithOpenId"] = "true"
+		props["OpenIdButtonText"] = "OIDC"
+		props["OpenIdButtonColor"] = "#5d33a4"
 	}
 
 	return props
@@ -412,7 +425,6 @@ func GenerateLimitedClientConfig(c *model.Config, telemetryID string, license *m
 		if *license.Features.Office365OAuth {
 			props["EnableSignUpWithOffice365"] = strconv.FormatBool(*c.Office365Settings.Enable)
 		}
-
 		if *license.Features.OpenId {
 			props["EnableSignUpWithOpenId"] = strconv.FormatBool(*c.OpenIdSettings.Enable)
 			props["OpenIdButtonColor"] = *c.OpenIdSettings.ButtonColor
@@ -448,6 +460,12 @@ func GenerateLimitedClientConfig(c *model.Config, telemetryID string, license *m
 
 	for key, value := range c.FeatureFlags.ToMap() {
 		props["FeatureFlag"+key] = value
+	}
+
+	if os.Getenv("OIDC_ISSUER") != "" {
+		props["EnableSignUpWithOpenId"] = "true"
+		props["OpenIdButtonText"] = "OIDC"
+		props["OpenIdButtonColor"] = "#5d33a4"
 	}
 
 	return props
