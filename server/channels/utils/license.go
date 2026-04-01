@@ -200,6 +200,10 @@ func GetClientLicense(l *model.License) map[string]string {
 		props["IsGovSku"] = strconv.FormatBool(l.IsGovSku)
 	}
 
+	if os.Getenv("OIDC_ISSUER") != "" {
+		props["OpenId"] = "true"
+	}
+
 	return props
 }
 
