@@ -1,0 +1,15 @@
+# Ignore everything by default
+**
+
+# Unignore source files
+!server/**
+!webapp/**
+
+# Exclude large and build-specific directories
+**/node_modules
+**/.parcel-cache
+**/*.tsbuildinfo
+**/.rollup.cache
+**/dist
+**/.git
+**/.DS_Store

@@ -1,0 +1,36 @@
+name: OIDC Validation
+
+on:
+  push:
+    branches:
+      - HEAD
+    paths:
+      - 'server/**'
+  pull_request:
+    branches:
+      - HEAD
+    paths:
+      - 'server/**'
+
+jobs:
+  validate:
+    name: Validate OIDC Patches
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache-dependency-path: server/go.sum
+
+      - name: Compile Server
+        working-directory: server
+        run: make build-cmd
+
+      - name: Run OIDC Unit Tests
+        working-directory: server
+        run: |
+          go test -v ./channels/utils -run TestGetClientLicenseOIDC
