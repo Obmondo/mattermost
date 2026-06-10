@@ -1,0 +1,60 @@
+# First stage - Ubuntu with document processing dependencies
+FROM ubuntu:noble-20251013 AS builder
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+ARG PUID=2000
+ARG PGID=2000
+
+# Install needed packages
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
+  ca-certificates \
+  curl \
+  media-types \
+  mailcap \
+  unrtf \
+  wv \
+  poppler-utils \
+  tidy \
+  tzdata \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create mattermost user and directory
+RUN mkdir -p /mattermost/data /mattermost/plugins /mattermost/client/plugins \
+  && groupadd --gid ${PGID} mattermost \
+  && useradd --uid ${PUID} --gid ${PGID} --comment "" --home-dir /mattermost mattermost
+
+# Final stage using distroless
+FROM gcr.io/distroless/base-debian12
+
+ENV PATH="/mattermost/bin:${PATH}"
+ENV MM_SERVICESETTINGS_ENABLELOCALMODE="true"
+ENV MM_INSTALL_TYPE="docker"
+
+COPY --from=builder /etc/mime.types /etc
+COPY --from=builder --chown=2000:2000 /etc/ssl/certs /etc/ssl/certs
+COPY --from=builder /usr/bin/pdftotext /usr/bin/pdftotext
+COPY --from=builder /usr/bin/wvText /usr/bin/wvText
+COPY --from=builder /usr/bin/wvWare /usr/bin/wvWare
+COPY --from=builder /usr/bin/unrtf /usr/bin/unrtf
+COPY --from=builder /usr/bin/tidy /usr/bin/tidy
+COPY --from=builder /usr/share/wv /usr/share/wv
+COPY --from=builder /usr/lib/libpoppler.so* /usr/lib/
+COPY --from=builder /usr/lib/libfreetype.so* /usr/lib/
+COPY --from=builder /usr/lib/libpng.so* /usr/lib/
+COPY --from=builder /usr/lib/libwv.so* /usr/lib/
+COPY --from=builder /usr/lib/libtidy.so* /usr/lib/
+COPY --from=builder /usr/lib/libfontconfig.so* /usr/lib/
+
+# Copy the local distribution folder
+# Assumes 'make package-linux-amd64' has been run and 'dist/mattermost' exists
+COPY --chown=2000:2000 dist/mattermost /mattermost
+
+COPY build/passwd /etc/passwd
+USER mattermost
+
+WORKDIR /mattermost
+CMD ["/mattermost/bin/mattermost"]
+
+EXPOSE 8065 8067 8074 8075
+VOLUME ["/mattermost/data", "/mattermost/logs", "/mattermost/config", "/mattermost/plugins", "/mattermost/client/plugins"]
