@@ -47,6 +47,45 @@ func (ps *PlatformService) License() *model.License {
 }
 
 func (ps *PlatformService) LoadLicense() {
+	users := 100000
+	trueVal := true
+	falseVal := false
+	fakeLicense := &model.License{
+		Id:           model.NewId(),
+		IssuedAt:     model.GetMillis(),
+		StartsAt:     model.GetMillis(),
+		ExpiresAt:    model.GetMillis() + (1000 * 60 * 60 * 24 * 365 * 10),
+		Customer:     &model.Customer{Name: "Spoofed Enterprise", Id: model.NewId(), Email: "admin@obmondo.com"},
+		SkuName:      "Enterprise",
+		SkuShortName: model.LicenseShortSkuEnterpriseAdvanced,
+		Features: &model.Features{
+			Users:                     &users,
+			LDAP:                      &trueVal,
+			LDAPGroups:                &trueVal,
+			MFA:                       &trueVal,
+			GoogleOAuth:               &trueVal,
+			Office365OAuth:            &trueVal,
+			OpenId:                    &trueVal,
+			Compliance:                &trueVal,
+			CustomBrand:               &trueVal,
+			CustomPermissionsSchemes:  &trueVal,
+			GuestAccounts:             &trueVal,
+			GuestAccountsPermissions:  &trueVal,
+			IDLoadedPushNotifications: &trueVal,
+			SAML:                      &trueVal,
+			Elasticsearch:             &trueVal,
+			FutureFeatures:            &trueVal,
+			ThemeManagement:           &trueVal,
+			EmailNotificationContents: &trueVal,
+			EnterprisePlugins:         &trueVal,
+			AdvancedLogging:           &trueVal,
+			Cloud:                     &falseVal,
+			SharedChannels:            &trueVal,
+			RemoteClusterService:      &trueVal,
+		},
+	}
+	ps.ValidateAndSetLicense(fakeLicense)
+	return
 	c := request.EmptyContext(ps.logger)
 
 	// ENV var overrides all other sources of license.
